@@ -1,0 +1,6 @@
+pycocotools
+torch
+numpy
+opencv-python
+ultralytics
+lap
