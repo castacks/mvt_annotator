@@ -5,6 +5,7 @@ import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
+import argparse
 
 import cv2
 import numpy as np
@@ -269,7 +270,8 @@ class SingleVideoAnnotatorModel:
 
         self.object_classes = object_classes
 
-        self.yolo_model = YOLO("yolov10x.pt").cuda()  # Load an official Detect model
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.yolo_model = YOLO("yolov10x.pt").to(self.device)  # Load an official Detect model
 
         # Determine the video source based on the file extension
         if os.path.isfile(video_source_path) and video_source_path.lower().endswith(
@@ -802,6 +804,7 @@ class SingleVideoAnnotatorView:
             frame_viz = cv2.resize(frame_viz, (1920, 1080))
 
             # save the frame visualization
+            os.makedirs('viz_output', exist_ok=True)
             if self.save:
                 cv2.imwrite(f"viz_output/frame_{self.viz_frame_count}.png", frame_viz)
 
@@ -1227,9 +1230,20 @@ class SingleVideoAnnotatorController:
 
 
 if __name__ == "__main__":
+        
+    argparser = argparse.ArgumentParser(description="Video Annotator")
+    argparser.add_argument("--init_state", action="store_true", help="Initialize YOLO/SAM detections/trackings")
+    argparser.add_argument("--load_state", action="store_true", help="Load existing annotator state")
+    argparser.add_argument("--user_interact", action="store_true", help="Enable user interaction for annotation")
+    argparser.add_argument("--render", action="store_true", help="Render video of annotations")
+    argparser.add_argument("--video_path", type=str, default="demo_fire/example_frames", help="Path to video frames")
+    argparser.add_argument("--annotator_states_path", type=str, default="demo_fire/example_states", help="Path to annotator states")
+    args = argparser.parse_args()
+    
+    assert args.init_state != args.load_state, f"Either init_state or load_state must be set, but not both."
 
-    rgb_frames_path = "/home/inf/mvt_annotator/demo/frames"
-    annotator_states_path = "/home/inf/mvt_annotator/demo/states"  # save the states here, including all tracking, detections, masks, etc.
+    rgb_frames_path = args.video_path
+    annotator_states_path = args.annotator_states_path  # save the states here, including all tracking, detections, masks, etc.
 
     os.makedirs(annotator_states_path, exist_ok=True)
 
@@ -1240,26 +1254,25 @@ if __name__ == "__main__":
         video_source_path=rgb_frames_path,
         sorting_rule=lambda x: x,  # change this based on your image naming convention
     )
-    controller = SingleVideoAnnotatorController(model, None)
-
-    # connect a view to the annotator model to visualize changes
-    # view = SingleVideoAnnotatorView(model, save=True)
-
-    # model.load_state() # use this to load the state of the annotator
-
-    model.initialize_YOLO_detection()  # this line computes the detections for the entire video
-    # model.save_state()
-
-    model.initialize_SAM_tracking()  # this one initializes SAM mask tracking for the entire video
-    # model.save_state()
-
-    # the below functions are for the user to interact with the model
-    controller.user_annotation_split_pass()
-    controller.user_annotation_merge_pass()
-
-    model.save_state()
-
-    # for rendering a video of the visualizations
-    # for i in range(model.get_frame_count()):
-    #     print(i)
-    #     model.notify_observers(frame_id=i, changed="detections")
+    if args.init_state:
+        print("Initializing YOLO detection and SAM tracking...")
+        model.initialize_YOLO_detection()
+        model.save_state()
+        model.initialize_SAM_tracking()
+        model.save_state()
+    if args.load_state:
+        print("Loading existing model state...")
+        model.load_state()
+    if args.user_interact:
+        print("Starting user interaction for annotation...")
+        controller = SingleVideoAnnotatorController(model, None)
+        controller.user_annotation_split_pass()
+        controller.user_annotation_merge_pass()
+    if args.render:
+        print("Rendering video of annotations...")
+        # connect a view to the annotator model to visualize changes
+        view = SingleVideoAnnotatorView(model, save=True)
+        # for rendering a video of the visualizations
+        for i in range(model.get_frame_count()):
+            print(i)
+            model.notify_observers(frame_id=i, changed="detections")
