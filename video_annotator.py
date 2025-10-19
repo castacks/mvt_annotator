@@ -758,7 +758,7 @@ import time
 
 class SingleVideoAnnotatorView:
     def __init__(
-        self, model: SingleVideoAnnotatorModel, update_rate_limit=10, save=False
+        self, model: SingleVideoAnnotatorModel, update_rate_limit=10, viz_output_dir="viz_output", save=False
     ):
         self.model = model
         self.model.add_observer(self)
@@ -770,6 +770,8 @@ class SingleVideoAnnotatorView:
         self.save = save
 
         self.viz_frame_count = 0
+        self.viz_output_dir = viz_output_dir
+        os.makedirs(self.viz_output_dir, exist_ok=True)
 
         self.visualized = set()
 
@@ -804,9 +806,8 @@ class SingleVideoAnnotatorView:
             frame_viz = cv2.resize(frame_viz, (1920, 1080))
 
             # save the frame visualization
-            os.makedirs('viz_output', exist_ok=True)
             if self.save:
-                cv2.imwrite(f"viz_output/frame_{self.viz_frame_count}.png", frame_viz)
+                cv2.imwrite(f"{self.viz_output_dir}/frame_{self.viz_frame_count}.png", frame_viz)
 
     def draw_frame(self, state, frame_id):
         """
@@ -1238,6 +1239,7 @@ if __name__ == "__main__":
     argparser.add_argument("--render", action="store_true", help="Render video of annotations")
     argparser.add_argument("--video_path", type=str, default="demo_fire/example_frames", help="Path to video frames")
     argparser.add_argument("--annotator_states_path", type=str, default="demo_fire/example_states", help="Path to annotator states")
+    argparser.add_argument("--viz_output_dir", type=str, default="viz_output", help="Path to save visualization output")
     args = argparser.parse_args()
     
     assert args.init_state != args.load_state, f"Either init_state or load_state must be set, but not both."
@@ -1271,7 +1273,7 @@ if __name__ == "__main__":
     if args.render:
         print("Rendering video of annotations...")
         # connect a view to the annotator model to visualize changes
-        view = SingleVideoAnnotatorView(model, save=True)
+        view = SingleVideoAnnotatorView(model, save=True, viz_output_dir=args.viz_output_dir)
         # for rendering a video of the visualizations
         for i in range(model.get_frame_count()):
             print(i)
